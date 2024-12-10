@@ -1,43 +1,14 @@
-import React, { ReactNode, useState } from "react";
+import React, { useState } from "react";
 import { Layout } from "antd";
-import styled from "styled-components";
 import Sidebar from "./Sidebar";
 import { useRouter } from "next/router";
-
-const { Header, Content, Footer } = Layout;
-
-const StyledLayout = styled(Layout)`
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-`;
-
-const StyledHeader = styled(Header)`
-  background-color: #ffffff;
-  padding: 24px;
-  margin-bottom: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-`;
-
-const StyledContent = styled(Content)`
-  background-color: #ffffff;
-  border-radius: 8px;
-  padding: 24px;
-  margin-bottom: 16px;
-  flex-grow: 1; /* Ensure content takes up the remaining space */
-`;
-
-const StyledFooter = styled(Footer)`
-  text-align: center;
-  padding: 16px;
-`;
-
-interface MainLayoutProps {
-  children: ReactNode;
-}
+import {
+  StyledContent,
+  StyledFooter,
+  StyledHeader,
+  StyledLayout,
+} from "../styles";
+import { MainLayoutProps } from "@/types/auth.type";
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const router = useRouter();

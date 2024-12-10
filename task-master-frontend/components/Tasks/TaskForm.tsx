@@ -1,21 +1,12 @@
 // src/components/Tasks/TaskForm.tsx
 import React, { useState, useEffect } from "react";
 import { Form, Input, Select, Button, message } from "antd";
-import styled from "styled-components";
 import { POST, PUT } from "../../utils/http";
-import { Task } from "@/types/task"; // Ensure this is the correct import
+import { Task, TaskFormProps } from "@/types/task"; // Ensure this is the correct import
+import { StyledForm } from "../styles";
+import { AxiosError } from "axios";
 
 const { TextArea } = Input;
-
-const StyledForm = styled(Form)`
-  max-width: 600px;
-  margin: 0 auto;
-`;
-
-interface TaskFormProps {
-  task?: Task;
-  onSubmitSuccess?: () => void;
-}
 
 const TaskForm: React.FC<TaskFormProps> = ({ task, onSubmitSuccess }) => {
   const [form] = Form.useForm();
@@ -38,7 +29,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ task, onSubmitSuccess }) => {
     try {
       if (task) {
         // Update existing task
-        const response = await PUT(`/tasks/${task.id}`, taskValues);
+        const response = await PUT(`/tasks/${task._id}`, taskValues);
         if (response.success) {
           message.success("Task updated successfully");
         } else {
@@ -55,9 +46,10 @@ const TaskForm: React.FC<TaskFormProps> = ({ task, onSubmitSuccess }) => {
         }
       }
       onSubmitSuccess?.();
-    } catch (error: any) {
-      console.error(error);
-      const errorMsg = error.message || "An unexpected error occurred";
+    } catch (error: unknown) {
+      const errors = error instanceof AxiosError;
+      console.error(error, errors);
+      const errorMsg = errors || "An unexpected error occurred";
       message.error(errorMsg);
     } finally {
       setLoading(false);

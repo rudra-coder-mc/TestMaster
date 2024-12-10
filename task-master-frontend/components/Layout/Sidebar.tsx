@@ -1,50 +1,20 @@
 import React, { useState, useEffect } from "react";
 import Cookies from "js-cookie"; // Ensure js-cookie is installed
-import { Layout, Menu } from "antd";
-import styled from "styled-components";
+import { Menu } from "antd";
 import Link from "next/link";
 import {
   DashboardOutlined,
   ProjectOutlined,
-  UserOutlined,
   LogoutOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { POST } from "@/utils/http";
-
-const { Sider } = Layout;
-
-const StyledSider = styled(Sider)<{ collapsed: boolean }>`
-  overflow: auto;
-  height: 100vh;
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  background-color: #001529;
-  width: ${({ collapsed }) => (collapsed ? "80px" : "200px")};
-  transition: width 0.3s ease-in-out;
-`;
-
-const LogoContainer = styled.div<{ collapsed: boolean }>`
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: ${({ collapsed }) => (collapsed ? "16px" : "18px")};
-  font-weight: bold;
-  background-color: #002140;
-  white-space: nowrap;
-`;
-
-const MenuContainer = styled.div`
-  flex-grow: 1;
-`;
-
-const LogoutContainer = styled.div`
-  margin-bottom: 16px;
-`;
+import {
+  LogoContainer,
+  LogoutContainer,
+  MenuContainer,
+  StyledSider,
+} from "../styles";
 
 const Sidebar: React.FC<{
   collapsed: boolean;
@@ -73,7 +43,6 @@ const Sidebar: React.FC<{
 
   const handleLogout = async () => {
     console.log("Logging out...");
-
     // Call the backend logout endpoint
     await POST("/auth/logout");
 

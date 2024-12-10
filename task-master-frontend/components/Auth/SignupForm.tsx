@@ -5,20 +5,7 @@ import { SocialButton } from "../styles";
 import { POST } from "@/utils/http"; // Ensure this utility is defined
 import { useRouter } from "next/router";
 import { AxiosError } from "axios";
-
-interface SignupFormData {
-  username: string;
-  email: string;
-  password: string;
-}
-
-interface AxiosErrorResponse {
-  response?: {
-    data: {
-      message: string;
-    };
-  };
-}
+import { AxiosErrorResponse, SignupFormData } from "@/types/auth.type";
 
 export default function SignupForm() {
   const [loading, setLoading] = useState(false);

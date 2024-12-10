@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Table,
   Tag,
@@ -11,48 +11,27 @@ import {
   Input,
   message,
   Popconfirm,
-  Transfer,
   Card,
   Statistic,
   Row,
   Col,
 } from "antd";
 import {
-  EditOutlined,
   DeleteOutlined,
   PlusOutlined,
   UserOutlined,
   ProjectOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import moment from "moment";
-import Cookies from "js-cookie";
-import { GET, POST, PUT, DELETE } from "../utils/http";
+import { GET, POST, DELETE } from "../utils/http";
+import { Task } from "@/types/task";
+import { User } from "@/types/user";
+import { getPriorityColor, getStatusColor } from "@/utils/color";
+import { AxiosError } from "axios";
 
 const { Option } = Select;
 const { TextArea } = Input;
-
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
-interface Task {
-  _id: string;
-  title: string;
-  description: string;
-  status:
-    | "pending"
-    | "completed"
-    | "cancelled"
-    | "not-started"
-    | "in-progress"
-    | "on-hold";
-  priority: "low" | "medium" | "high";
-  dueDate: Date;
-  assignedTo: string[];
-}
 
 const AdminTaskDashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -61,38 +40,44 @@ const AdminTaskDashboard: React.FC = () => {
   const [isTaskModalVisible, setIsTaskModalVisible] = useState<boolean>(false);
   const [isAssignModalVisible, setIsAssignModalVisible] =
     useState<boolean>(false);
-  const [currentTask, setCurrentTask] = useState<Partial<Task>>({});
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] =
     useState<Task | null>(null);
   const [form] = Form.useForm();
 
-  // Fetch all tasks and users on component mount
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
+  // Memoized data fetching function
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [tasksResponse, usersResponse] = await Promise.all([
+        GET<null, Task[]>("/tasks/all"),
+        GET<null, User[]>("/users/all"),
+      ]);
 
-        // Fetch tasks
-        const tasksResponse = await GET<null, Task[]>("/tasks/all");
-        if (tasksResponse.success) {
-          setTasks(tasksResponse.data);
-        }
-
-        // Fetch users
-        const usersResponse = await GET<null, User[]>("/users/all");
-        if (usersResponse.success) {
-          setUsers(usersResponse.data);
-          console.log(usersResponse.data);
-        }
-      } catch (error) {
-        message.error("Failed to fetch data");
-      } finally {
-        setLoading(false);
+      if (tasksResponse.success) {
+        setTasks(tasksResponse.data);
       }
-    };
 
-    fetchData();
+      if (usersResponse.success) {
+        setUsers(usersResponse.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch data", error);
+      message.error("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Centralized error handling
+  const handleApiError = (action: string, error: AxiosError) => {
+    console.error(`Failed to ${action}`, error);
+    message.error(`Failed to ${action}`);
+  };
 
   // Create a new task
   const handleCreateTask = async () => {
@@ -110,12 +95,12 @@ const AdminTaskDashboard: React.FC = () => {
 
       if (response.success) {
         message.success("Task created successfully");
-        setTasks([...tasks, response.data]);
+        setTasks((prevTasks) => [...prevTasks, response.data]);
         setIsTaskModalVisible(false);
         form.resetFields();
       }
     } catch (error) {
-      message.error("Failed to create task");
+      handleApiError("create task", error as AxiosError);
     }
   };
 
@@ -134,15 +119,15 @@ const AdminTaskDashboard: React.FC = () => {
 
       if (response.success) {
         message.success("Task assigned successfully");
-        setTasks(
-          tasks.map((task) =>
+        setTasks((prevTasks) =>
+          prevTasks.map((task) =>
             task._id === selectedTaskForAssignment._id ? response.data : task,
           ),
         );
         setIsAssignModalVisible(false);
       }
     } catch (error) {
-      message.error("Failed to assign task");
+      handleApiError("assign task", error as AxiosError);
     }
   };
 
@@ -152,10 +137,12 @@ const AdminTaskDashboard: React.FC = () => {
       const response = await DELETE<null, null>(`/tasks/delete/${taskId}`);
       if (response.success) {
         message.success("Task deleted successfully");
-        setTasks(tasks.filter((task) => task._id !== taskId));
+        setTasks((prevTasks) =>
+          prevTasks.filter((task) => task._id !== taskId),
+        );
       }
     } catch (error) {
-      message.error("Failed to delete task");
+      handleApiError("delete task", error as AxiosError);
     }
   };
 
@@ -176,30 +163,17 @@ const AdminTaskDashboard: React.FC = () => {
       title: "Status",
       dataIndex: "status",
       key: "status",
-      render: (status: Task["status"]) => {
-        const colorMap: Record<Task["status"], string> = {
-          pending: "orange",
-          "not-started": "gray",
-          "in-progress": "blue",
-          completed: "green",
-          cancelled: "red",
-          "on-hold": "purple",
-        };
-        return <Tag color={colorMap[status]}>{status.toUpperCase()}</Tag>;
-      },
+      render: (status: Task["status"]) => (
+        <Tag color={getStatusColor(status)}>{status.toUpperCase()}</Tag>
+      ),
     },
     {
       title: "Priority",
       dataIndex: "priority",
       key: "priority",
-      render: (priority: Task["priority"]) => {
-        const colorMap: Record<Task["priority"], string> = {
-          low: "green",
-          medium: "orange",
-          high: "red",
-        };
-        return <Tag color={colorMap[priority]}>{priority.toUpperCase()}</Tag>;
-      },
+      render: (priority: Task["priority"]) => (
+        <Tag color={getPriorityColor(priority)}>{priority.toUpperCase()}</Tag>
+      ),
     },
     {
       title: "Assigned To",
@@ -224,7 +198,7 @@ const AdminTaskDashboard: React.FC = () => {
     {
       title: "Actions",
       key: "actions",
-      render: (text: string, record: Task) => (
+      render: (record: Task) => (
         <Space size="middle">
           <Button
             icon={<PlusOutlined />}
@@ -258,70 +232,72 @@ const AdminTaskDashboard: React.FC = () => {
 
   return (
     <div>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Total Tasks"
-              value={taskStats.total}
-              prefix={<ProjectOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Completed Tasks"
-              value={taskStats.completed}
-              prefix={<UserOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="In Progress Tasks"
-              value={taskStats.inProgress}
-              prefix={<UserOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Pending Tasks"
-              value={taskStats.pending}
-              prefix={<UserOutlined />}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <div>
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          {[
+            {
+              title: "Total Tasks",
+              value: taskStats.total,
+              icon: <ProjectOutlined />,
+            },
+            {
+              title: "Completed Tasks",
+              value: taskStats.completed,
+              icon: <UserOutlined />,
+            },
+            {
+              title: "In Progress Tasks",
+              value: taskStats.inProgress,
+              icon: <UserOutlined />,
+            },
+            {
+              title: "Pending Tasks",
+              value: taskStats.pending,
+              icon: <UserOutlined />,
+            },
+          ].map((stat, index) => (
+            <Col key={index} span={6}>
+              <Card>
+                <Statistic
+                  title={stat.title}
+                  value={stat.value}
+                  prefix={stat.icon}
+                />
+              </Card>
+            </Col>
+          ))}
+        </Row>
 
-      <Button
-        type="primary"
-        icon={<PlusOutlined />}
-        onClick={() => setIsTaskModalVisible(true)}
-        style={{ marginBottom: 16 }}
-      >
-        Create Task
-      </Button>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsTaskModalVisible(true)}
+          >
+            Create Task
+          </Button>
+          <Button type="default" icon={<ReloadOutlined />} onClick={fetchData}>
+            Refresh
+          </Button>
+        </div>
 
-      <Table
-        columns={columns}
-        dataSource={tasks}
-        loading={loading}
-        rowKey="_id"
-        pagination={{
-          total: tasks.length,
-          pageSize: 10,
-          showSizeChanger: true,
-        }}
-      />
+        <Table
+          columns={columns}
+          dataSource={tasks}
+          loading={loading}
+          rowKey="_id"
+          pagination={{
+            total: tasks.length,
+            pageSize: 10,
+            showSizeChanger: true,
+          }}
+        />
+      </div>
 
       {/* Create/Edit Task Modal */}
       <Modal
         title="Create Task"
-        visible={isTaskModalVisible}
+        open={isTaskModalVisible}
         onOk={handleCreateTask}
         onCancel={() => {
           setIsTaskModalVisible(false);
@@ -347,12 +323,20 @@ const AdminTaskDashboard: React.FC = () => {
             rules={[{ required: true, message: "Please select a status!" }]}
           >
             <Select>
-              <Option value="pending">Pending</Option>
-              <Option value="not-started">Not Started</Option>
-              <Option value="in-progress">In Progress</Option>
-              <Option value="completed">Completed</Option>
-              <Option value="cancelled">Cancelled</Option>
-              <Option value="on-hold">On Hold</Option>
+              {[
+                "pending",
+                "not-started",
+                "in-progress",
+                "completed",
+                "cancelled",
+                "on-hold",
+              ].map((status) => (
+                <Option key={status} value={status}>
+                  {status
+                    .replace(/-/g, " ")
+                    .replace(/\b\w/g, (l) => l.toUpperCase())}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item
@@ -361,9 +345,11 @@ const AdminTaskDashboard: React.FC = () => {
             rules={[{ required: true, message: "Please select a priority!" }]}
           >
             <Select>
-              <Option value="low">Low</Option>
-              <Option value="medium">Medium</Option>
-              <Option value="high">High</Option>
+              {["low", "medium", "high"].map((priority) => (
+                <Option key={priority} value={priority}>
+                  {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item name="dueDate" label="Due Date">
@@ -375,7 +361,7 @@ const AdminTaskDashboard: React.FC = () => {
       {/* Assign Task Modal */}
       <Modal
         title="Assign Task"
-        visible={isAssignModalVisible}
+        open={isAssignModalVisible}
         onOk={() => {
           const selectedUserIds = form.getFieldValue("assignedTo") || [];
           handleAssignTask(selectedUserIds);

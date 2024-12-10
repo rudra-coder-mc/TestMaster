@@ -1,25 +1,11 @@
 // src/components/Tasks/TaskFilterBar.tsx
 import React from "react";
-import { Row, Col, Select, Input, Button } from "antd";
-import styled from "styled-components";
+import { Col, Select, Input, Button } from "antd";
+import { FilterContainer } from "../styles";
+import { TaskFilterProps } from "@/types/task";
 
 const { Option } = Select;
 const { Search } = Input;
-
-const FilterContainer = styled(Row)`
-  margin-bottom: 20px;
-  background-color: #f0f2f5;
-  padding: 16px;
-  border-radius: 8px;
-`;
-
-interface TaskFilterProps {
-  onFilter: (filters: {
-    status?: string;
-    search?: string;
-    assignedTo?: string;
-  }) => void;
-}
 
 const TaskFilterBar: React.FC<TaskFilterProps> = ({ onFilter }) => {
   const handleStatusChange = (status: string) => {

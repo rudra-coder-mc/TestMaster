@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Table,
   Tag,
@@ -10,197 +10,154 @@ import {
   Form,
   Input,
   message,
-  Avatar,
-  Tooltip,
 } from "antd";
-import {
-  EditOutlined,
-  DeleteOutlined,
-  PlusOutlined,
-  UserOutlined,
-} from "@ant-design/icons";
+import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import moment from "moment";
-import Cookies from "js-cookie"; // For cookie management
-import { GET, POST, PUT, DELETE } from "../../utils/http"; // Adjust the import path
+import { DELETE, GET, PUT } from "@/utils/http";
+import { AxiosErrorResponse } from "@/types/auth.type";
+import useUserAuth from "@/hooks/useUserAuth";
 
-const { Option } = Select;
-const { TextArea } = Input;
+// Constants with Improved Type Safety
+const TASK_STATUSES = {
+  PENDING: "pending",
+  NOT_STARTED: "not-started",
+  IN_PROGRESS: "in-progress",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
+  ON_HOLD: "on-hold",
+} as const;
 
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-}
+const TASK_PRIORITIES = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+} as const;
 
-interface Task {
+// Type-safe Color Mapping
+const STATUS_COLOR_MAP: Record<keyof typeof TASK_STATUSES, string> = {
+  PENDING: "orange",
+  NOT_STARTED: "gray",
+  IN_PROGRESS: "blue",
+  COMPLETED: "green",
+  CANCELLED: "red",
+  ON_HOLD: "purple",
+};
+
+const PRIORITY_COLOR_MAP: Record<keyof typeof TASK_PRIORITIES, string> = {
+  LOW: "green",
+  MEDIUM: "orange",
+  HIGH: "red",
+};
+
+// Types
+type TaskStatus = (typeof TASK_STATUSES)[keyof typeof TASK_STATUSES];
+type TaskPriority = (typeof TASK_PRIORITIES)[keyof typeof TASK_PRIORITIES];
+
+type Task = {
   _id: string;
   title: string;
-  description: string;
-  status:
-    | "pending"
-    | "completed"
-    | "cancelled"
-    | "not-started"
-    | "in-progress"
-    | "on-hold";
-  priority: "low" | "medium" | "high";
-  dueDate: Date;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate?: Date;
   assignedTo: string[];
-}
+};
 
-const TaskList: React.FC = () => {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
-  const [isEditMode, setIsEditMode] = useState<boolean>(false);
-  const [currentTask, setCurrentTask] = useState<Partial<Task>>({});
-  const [filters, setFilters] = useState<{
-    status: string | undefined;
-    priority: string | undefined;
-    dueDate: string | undefined;
-  }>({
-    status: undefined,
-    priority: undefined,
-    dueDate: undefined,
-  });
+// Refined type guard for AxiosErrorResponse
+const isAxiosErrorResponse = (error: unknown): error is AxiosErrorResponse => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof (error as { response: unknown }).response === "object" &&
+    "data" in (error as { response: { data: unknown } }).response &&
+    typeof (error as { response: { data: unknown } }).response.data ===
+      "object" &&
+    "message" in
+      (error as { response: { data: { message: string } } }).response.data
+  );
+};
 
-  const [userId, setUserId] = useState<string | undefined>(undefined);
-  const [userRole, setUserRole] = useState<string | undefined>(undefined);
-  const [form] = Form.useForm();
+// Updated error handler using the type-safe guard
+const handleApiError = (error: unknown, defaultMessage: string) => {
+  console.error(error);
 
-  // Retrieve user info from cookies
-  useEffect(() => {
-    const userCookie = Cookies.get("user");
-    if (userCookie) {
-      try {
-        // Remove the 'j:' prefix, if it exists
-        const cleanedUserCookie = userCookie.startsWith("j:")
-          ? userCookie.slice(2)
-          : userCookie;
+  // Check if the error is of type AxiosErrorResponse
+  if (isAxiosErrorResponse(error)) {
+    // Use optional chaining to avoid accessing properties of 'undefined'
+    const errorMessage = error.response?.data?.message || defaultMessage;
 
-        const user = JSON.parse(cleanedUserCookie);
-        setUserId(user._id);
-        setUserRole(user.role);
-      } catch (error) {
-        console.error("Invalid JSON in user cookie:", error);
-      }
-    } else {
-      console.warn("No user cookie found.");
-    }
-  }, []);
+    // Ensure message.error gets a string
+    message.error(
+      typeof errorMessage === "string" ? errorMessage : defaultMessage,
+    );
+  } else {
+    // If error doesn't match the expected structure, show the default message
+    message.error(defaultMessage);
+  }
+};
 
-  // Fetch tasks for the logged-in user with filters
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        setLoading(true);
-
-        // Build filter query params dynamically
-        const filterParams = Object.fromEntries(
-          Object.entries({
-            assignedTo: userId,
-            status: filters.status,
-            priority: filters.priority,
-            dueDate: filters.dueDate,
-          }).filter(([_, value]) => value !== undefined), // Remove undefined values
-        ) as Record<string, string>;
-
-        // Make GET request with query parameters
-        const queryString = new URLSearchParams(filterParams).toString();
-
-        // Make GET request with query parameters
-        const tasksResponse = await GET<null, Task[]>(
-          `/tasks/filter/user/${userId}?${queryString}`,
-        );
-
-        if (tasksResponse.success) {
-          setTasks(tasksResponse.data);
-          if (tasksResponse.message) {
-            message.info(tasksResponse.message);
-          }
-        } else {
-          message.error("Failed to fetch tasks");
-        }
-      } catch (error: any) {
-        message.error(error.response?.data?.message || "Error fetching tasks");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (userId) {
-      fetchTasks();
-    }
-  }, [userId, filters]); // Fetch tasks when userId or filters change
-  // Handle task deletion
-  const handleDelete = async (taskId: string) => {
-    Modal.confirm({
-      title: "Are you sure you want to delete this task?",
-      content: "This action cannot be undone.",
-      onOk: async () => {
-        try {
-          const response = await DELETE<null, null>(`/tasks/delete/${taskId}`);
-          if (response.success) {
-            message.success("Task deleted successfully");
-            setTasks(tasks.filter((task) => task._id !== taskId));
-          } else {
-            message.error("Failed to delete task");
-          }
-        } catch (error) {
-          message.error("Error deleting task");
-        }
-      },
-    });
-  };
-
-  // Open modal for editing task
-  const showTaskModal = (task?: Task) => {
-    if (task) {
-      setIsEditMode(true);
-      setCurrentTask(task);
-      form.setFieldsValue({
-        ...task,
-        dueDate: task.dueDate ? moment(task.dueDate) : undefined,
-      });
-    } else {
-      setIsEditMode(false);
-      form.resetFields();
-    }
-    setIsModalVisible(true);
-  };
-
-  // Handle form submission for updating task
-  const handleSubmit = async () => {
+// API Service
+const taskService = {
+  async fetchTasks(userId: string, filters: Record<string, string>) {
     try {
-      const values = await form.validateFields();
-      const payload = {
-        ...values,
-        dueDate: values.dueDate ? values.dueDate.toISOString() : undefined,
-      };
-
-      const response = await PUT<Partial<Task>, null>(
-        `/tasks/update/${currentTask._id}`,
-        payload,
+      const queryString = new URLSearchParams(filters).toString();
+      const response = await GET<null, Task[]>(
+        `/tasks/filter/user/${userId}?${queryString}`,
       );
 
-      if (response.success) {
-        message.success("Task updated successfully");
-        setTasks((prev) =>
-          prev.map((task) =>
-            task._id === currentTask._id ? { ...task, ...values } : task,
-          ),
-        );
-      } else {
-        message.error("Failed to update task");
+      if (!response.success || !response.data) {
+        throw new Error("Failed to fetch tasks");
+      }
+      return response.data;
+    } catch (error) {
+      handleApiError(error, "Error fetching tasks");
+      return [];
+    }
+  },
+
+  async updateTask(taskId: string, payload: Partial<Task>) {
+    try {
+      const response = await PUT(`/tasks/update/${taskId}`, payload);
+
+      if (!response.success) {
+        throw new Error("Failed to update task");
       }
 
-      setIsModalVisible(false);
+      return true;
     } catch (error) {
-      message.error("Failed to save task");
+      handleApiError(error, "Failed to save task");
+      return false;
     }
-  };
+  },
 
-  // Columns for the task table
+  async deleteTask(taskId: string) {
+    try {
+      const response = await DELETE(`/tasks/delete/${taskId}`);
+
+      if (!response.success) {
+        throw new Error("Failed to delete task");
+      }
+
+      return true;
+    } catch (error) {
+      handleApiError(error, "Error deleting task");
+      return false;
+    }
+  },
+};
+
+// Main Component
+const TaskList: React.FC = () => {
+  const { userId } = useUserAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [currentTask, setCurrentTask] = useState<Partial<Task>>({});
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [form] = Form.useForm();
+
+  // Columns definition (memoization removed, simplified)
   const columns = [
     {
       title: "Title",
@@ -210,104 +167,190 @@ const TaskList: React.FC = () => {
     {
       title: "Description",
       dataIndex: "description",
-      key: "description",
       render: (description: string) => description || "No description",
     },
     {
       title: "Status",
       dataIndex: "status",
-      key: "status",
-      render: (status: Task["status"]) => {
-        const colorMap: Record<Task["status"], string> = {
-          pending: "orange",
-          "not-started": "gray",
-          "in-progress": "blue",
-          completed: "green",
-          cancelled: "red",
-          "on-hold": "purple",
-        };
-        return <Tag color={colorMap[status]}>{status.toUpperCase()}</Tag>;
-      },
+      render: (status: TaskStatus) => (
+        <Tag
+          color={
+            STATUS_COLOR_MAP[status.toUpperCase() as keyof typeof TASK_STATUSES]
+          }
+        >
+          {status.toUpperCase()}
+        </Tag>
+      ),
     },
     {
       title: "Priority",
       dataIndex: "priority",
-      key: "priority",
-      render: (priority: Task["priority"]) => {
-        const colorMap: Record<Task["priority"], string> = {
-          low: "green",
-          medium: "orange",
-          high: "red",
-        };
-        return <Tag color={colorMap[priority]}>{priority.toUpperCase()}</Tag>;
-      },
+      render: (priority: TaskPriority) => (
+        <Tag
+          color={
+            PRIORITY_COLOR_MAP[
+              priority.toUpperCase() as keyof typeof TASK_PRIORITIES
+            ]
+          }
+        >
+          {priority.toUpperCase()}
+        </Tag>
+      ),
     },
     {
       title: "Due Date",
       dataIndex: "dueDate",
-      key: "dueDate",
       render: (date: Date) =>
         date ? moment(date).format("MMMM D, YYYY") : "No due date",
     },
     {
       title: "Actions",
-      key: "actions",
-      render: (text: string, record: Task) =>
-        record.assignedTo.includes(userId || "") && (
-          <Space size="middle">
-            <Button
-              icon={<EditOutlined />}
-              onClick={() => showTaskModal(record)}
-            />
-            <Button
-              icon={<DeleteOutlined />}
-              onClick={() => handleDelete(record._id)}
-              danger
-            />
-          </Space>
-        ),
+      render: (record: Task) => (
+        <Space>
+          <Button
+            icon={<EditOutlined />}
+            onClick={() => handleEditTask(record)}
+          />
+          <Button
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteTask(record._id)}
+            danger
+          />
+        </Space>
+      ),
     },
   ];
+
+  // Fetch Tasks
+  const fetchTasks = useCallback(async () => {
+    if (!userId) return;
+
+    setLoading(true);
+    const filteredTasks = await taskService.fetchTasks(userId, {
+      ...filters,
+      assignedTo: userId,
+    });
+
+    setTasks(filteredTasks);
+    setLoading(false);
+  }, [userId, filters]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
+
+  // Task Handlers
+  const handleEditTask = (task?: Task) => {
+    setCurrentTask(task || {});
+    form.setFieldsValue({
+      ...task,
+      dueDate: task?.dueDate ? moment(task.dueDate) : undefined,
+    });
+    setIsModalVisible(true);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    Modal.confirm({
+      title: "Are you sure you want to delete this task?",
+      content: "This action cannot be undone.",
+      onOk: async () => {
+        const success = await taskService.deleteTask(taskId);
+        if (success) {
+          setTasks(tasks.filter((task) => task._id !== taskId));
+          message.success("Task deleted successfully");
+        }
+      },
+    });
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      const payload = {
+        ...values,
+        dueDate: values.dueDate ? values.dueDate.toISOString() : undefined,
+      };
+
+      const success = await taskService.updateTask(currentTask._id!, payload);
+
+      if (success) {
+        setTasks((prev) =>
+          prev.map((task) =>
+            task._id === currentTask._id ? { ...task, ...values } : task,
+          ),
+        );
+        setIsModalVisible(false);
+        message.success("Task updated successfully");
+      }
+    } catch (error) {
+      handleApiError(error, "Failed to save task");
+    }
+  };
 
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
+        <Button onClick={fetchTasks} type="primary">
+          Refresh
+        </Button>
         <Select
           placeholder="Filter by Status"
           style={{ width: 200 }}
           allowClear
-          onChange={(value) =>
-            setFilters((prev) => ({ ...prev, status: value }))
-          }
+          onChange={(value) => {
+            setFilters((prev) => {
+              const updatedFilters = { ...prev };
+              if (value) {
+                updatedFilters.status = value;
+              } else {
+                delete updatedFilters.status;
+              }
+              return updatedFilters;
+            });
+          }}
         >
-          <Option value="pending">Pending</Option>
-          <Option value="not-started">Not Started</Option>
-          <Option value="in-progress">In Progress</Option>
-          <Option value="completed">Completed</Option>
-          <Option value="cancelled">Cancelled</Option>
-          <Option value="on-hold">On Hold</Option>
+          {Object.values(TASK_STATUSES).map((status) => (
+            <Select.Option key={status} value={status}>
+              {status.replace("-", " ").toUpperCase()}
+            </Select.Option>
+          ))}
         </Select>
         <Select
           placeholder="Filter by Priority"
           style={{ width: 200 }}
           allowClear
-          onChange={(value) =>
-            setFilters((prev) => ({ ...prev, priority: value }))
-          }
+          onChange={(value) => {
+            setFilters((prev) => {
+              const updatedFilters = { ...prev };
+              if (value) {
+                updatedFilters.priority = value;
+              } else {
+                delete updatedFilters.priority;
+              }
+              return updatedFilters;
+            });
+          }}
         >
-          <Option value="low">Low</Option>
-          <Option value="medium">Medium</Option>
-          <Option value="high">High</Option>
+          {Object.values(TASK_PRIORITIES).map((priority) => (
+            <Select.Option key={priority} value={priority}>
+              {priority.toUpperCase()}
+            </Select.Option>
+          ))}
         </Select>
         <DatePicker
           placeholder="Filter by Due Date"
           style={{ width: 200 }}
-          onChange={(date) =>
-            setFilters((prev) => ({
-              ...prev,
-              dueDate: date?.toISOString() || undefined,
-            }))
-          }
+          onChange={(date) => {
+            setFilters((prev) => {
+              const updatedFilters = { ...prev };
+              if (date) {
+                updatedFilters.dueDate = date.toISOString();
+              } else {
+                delete updatedFilters.dueDate;
+              }
+              return updatedFilters;
+            });
+          }}
         />
       </Space>
 
@@ -323,10 +366,9 @@ const TaskList: React.FC = () => {
         }}
       />
 
-      {/* Modal for editing task */}
       <Modal
-        title={isEditMode ? "Edit Task" : "Create Task"}
-        visible={isModalVisible}
+        title="Edit Task"
+        open={isModalVisible}
         onOk={handleSubmit}
         onCancel={() => setIsModalVisible(false)}
       >
@@ -341,7 +383,7 @@ const TaskList: React.FC = () => {
             <Input />
           </Form.Item>
           <Form.Item name="description" label="Description">
-            <TextArea rows={4} />
+            <Input.TextArea rows={4} />
           </Form.Item>
           <Form.Item
             name="status"
@@ -349,12 +391,11 @@ const TaskList: React.FC = () => {
             rules={[{ required: true, message: "Please select a status!" }]}
           >
             <Select>
-              <Option value="pending">Pending</Option>
-              <Option value="not-started">Not Started</Option>
-              <Option value="in-progress">In Progress</Option>
-              <Option value="completed">Completed</Option>
-              <Option value="cancelled">Cancelled</Option>
-              <Option value="on-hold">On Hold</Option>
+              {Object.values(TASK_STATUSES).map((status) => (
+                <Select.Option key={status} value={status}>
+                  {status.replace("-", " ").toUpperCase()}
+                </Select.Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item
@@ -363,9 +404,11 @@ const TaskList: React.FC = () => {
             rules={[{ required: true, message: "Please select a priority!" }]}
           >
             <Select>
-              <Option value="low">Low</Option>
-              <Option value="medium">Medium</Option>
-              <Option value="high">High</Option>
+              {Object.values(TASK_PRIORITIES).map((priority) => (
+                <Select.Option key={priority} value={priority}>
+                  {priority.toUpperCase()}
+                </Select.Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item name="dueDate" label="Due Date">
@@ -376,5 +419,4 @@ const TaskList: React.FC = () => {
     </div>
   );
 };
-
 export default TaskList;

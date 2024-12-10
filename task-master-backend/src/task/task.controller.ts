@@ -10,14 +10,13 @@ import {
   UseGuards,
   Request,
   ForbiddenException,
-  NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { TaskService } from './task.service';
 import { RolesGuard } from 'src/guards/roles.guard';
 import { Roles } from 'src/decorator/roles.decorator';
 import { UserRole } from 'src/users/users.schema';
-import { Task, TaskStatus } from './task.schema';
+import { Task } from './task.schema';
 
 @Controller('tasks')
 export class TaskController {

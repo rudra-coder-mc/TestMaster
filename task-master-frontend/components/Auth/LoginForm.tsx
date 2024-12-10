@@ -5,19 +5,7 @@ import { SocialButton } from "../styles"; // Styled component for the button
 import { POST } from "@/utils/http"; // Make sure this utility is properly defined
 import { useRouter } from "next/router";
 import { AxiosError } from "axios";
-
-interface LoginFormData {
-  email: string;
-  password: string;
-}
-
-interface AxiosErrorResponse {
-  response?: {
-    data: {
-      message: string;
-    };
-  };
-}
+import { AxiosErrorResponse, LoginFormData } from "@/types/auth.type";
 
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
