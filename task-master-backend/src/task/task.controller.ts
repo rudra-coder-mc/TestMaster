@@ -47,6 +47,14 @@ export class TaskController {
     return { success: true, data: task };
   }
 
+  @Post('unassign')
+  @Roles(UserRole.Admin)
+  @UseGuards(RolesGuard)
+  async unassignTask(@Body() body: { taskId: string; userIds: string[] }) {
+    const task = await this.taskService.unassignTask(body.taskId, body.userIds);
+    return { success: true, data: task };
+  }
+
   @Delete(':id')
   @Roles(UserRole.Admin)
   @UseGuards(RolesGuard)

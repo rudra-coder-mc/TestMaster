@@ -15,6 +15,8 @@ import {
   Statistic,
   Row,
   Col,
+  Avatar,
+  Tooltip,
 } from "antd";
 import {
   DeleteOutlined,
@@ -22,6 +24,8 @@ import {
   UserOutlined,
   ProjectOutlined,
   ReloadOutlined,
+  UserDeleteOutlined,
+  CloseCircleOutlined,
 } from "@ant-design/icons";
 import moment from "moment";
 import { GET, POST, DELETE } from "../utils/http";
@@ -39,6 +43,8 @@ const AdminTaskDashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [isTaskModalVisible, setIsTaskModalVisible] = useState<boolean>(false);
   const [isAssignModalVisible, setIsAssignModalVisible] =
+    useState<boolean>(false);
+  const [isUnassignModalVisible, setIsUnassignModalVisible] =
     useState<boolean>(false);
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] =
     useState<Task | null>(null);
@@ -90,7 +96,7 @@ const AdminTaskDashboard: React.FC = () => {
 
       const response = await POST<Partial<Task>, Task>(
         "/tasks/create",
-        payload,
+        payload
       );
 
       if (response.success) {
@@ -114,20 +120,47 @@ const AdminTaskDashboard: React.FC = () => {
         {
           taskId: selectedTaskForAssignment._id,
           userIds: selectedUserIds,
-        },
+        }
       );
 
       if (response.success) {
         message.success("Task assigned successfully");
         setTasks((prevTasks) =>
           prevTasks.map((task) =>
-            task._id === selectedTaskForAssignment._id ? response.data : task,
-          ),
+            task._id === selectedTaskForAssignment._id ? response.data : task
+          )
         );
         setIsAssignModalVisible(false);
       }
     } catch (error) {
       handleApiError("assign task", error as AxiosError);
+    }
+  };
+
+  // Unassign users from a task
+  const handleUnassignTask = async (selectedUserIds: string[]) => {
+    if (!selectedTaskForAssignment) return;
+
+    try {
+      const response = await POST<{ taskId: string; userIds: string[] }, Task>(
+        "/tasks/unassign",
+        {
+          taskId: selectedTaskForAssignment._id,
+          userIds: selectedUserIds,
+        }
+      );
+
+      if (response.success) {
+        message.success("Users unassigned successfully");
+        setTasks((prevTasks) =>
+          prevTasks.map((task) =>
+            task._id === selectedTaskForAssignment._id ? response.data : task
+          )
+        );
+        setIsUnassignModalVisible(false);
+      }
+    } catch (error) {
+      handleApiError("unassign users", error as AxiosError);
     }
   };
 
@@ -138,7 +171,7 @@ const AdminTaskDashboard: React.FC = () => {
       if (response.success) {
         message.success("Task deleted successfully");
         setTasks((prevTasks) =>
-          prevTasks.filter((task) => task._id !== taskId),
+          prevTasks.filter((task) => task._id !== taskId)
         );
       }
     } catch (error) {
@@ -179,12 +212,41 @@ const AdminTaskDashboard: React.FC = () => {
       title: "Assigned To",
       dataIndex: "assignedTo",
       key: "assignedTo",
-      render: (assignedUserIds: string[]) => {
+      render: (assignedUserIds: string[], record: Task) => {
         const assignedUsers = users.filter((user) =>
-          assignedUserIds.includes(user._id),
+          assignedUserIds.includes(user._id)
         );
+
         return (
-          assignedUsers.map((user) => user.name).join(", ") || "Unassigned"
+          <Avatar.Group maxCount={3} maxStyle={{ backgroundColor: "#f56a00" }}>
+            {assignedUsers.map((user) => (
+              <Tooltip
+                key={user._id}
+                title={`${user.username} (${user.email})`}
+              >
+                <span style={{ position: "relative" }}>
+                  <Avatar style={{ backgroundColor: "#87d068" }}>
+                    {user.username.charAt(0).toUpperCase()}
+                  </Avatar>
+                  <CloseCircleOutlined
+                    style={{
+                      position: "absolute",
+                      top: -8,
+                      right: -8,
+                      backgroundColor: "white",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleUnassignTask([user._id]);
+                      setSelectedTaskForAssignment(record);
+                    }}
+                  />
+                </span>
+              </Tooltip>
+            ))}
+          </Avatar.Group>
         );
       },
     },
@@ -208,6 +270,15 @@ const AdminTaskDashboard: React.FC = () => {
             }}
           >
             Assign
+          </Button>
+          <Button
+            icon={<UserDeleteOutlined />}
+            onClick={() => {
+              setSelectedTaskForAssignment(record);
+              setIsUnassignModalVisible(true);
+            }}
+          >
+            Unassign
           </Button>
           <Popconfirm
             title="Are you sure you want to delete this task?"
@@ -384,9 +455,50 @@ const AdminTaskDashboard: React.FC = () => {
             >
               {users.map((user) => (
                 <Option key={user._id} value={user._id}>
-                  {user.name} ({user.email})
+                  {user.username} ({user.email})
                 </Option>
               ))}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Unassign Task Modal */}
+      <Modal
+        title="Unassign Users"
+        open={isUnassignModalVisible}
+        onOk={() => {
+          const selectedUserIds = form.getFieldValue("unassignedUsers") || [];
+          handleUnassignTask(selectedUserIds);
+        }}
+        onCancel={() => {
+          setIsUnassignModalVisible(false);
+          form.resetFields();
+        }}
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="unassignedUsers"
+            label="Select Users to Unassign"
+            rules={[
+              { required: true, message: "Please select users to unassign!" },
+            ]}
+          >
+            <Select
+              mode="multiple"
+              placeholder="Select users to unassign"
+              style={{ width: "100%" }}
+            >
+              {selectedTaskForAssignment &&
+                users
+                  .filter((user) =>
+                    selectedTaskForAssignment.assignedTo.includes(user._id)
+                  )
+                  .map((user) => (
+                    <Option key={user._id} value={user._id}>
+                      {user.username} ({user.email})
+                    </Option>
+                  ))}
             </Select>
           </Form.Item>
         </Form>

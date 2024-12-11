@@ -143,4 +143,16 @@ export class TaskService {
       );
     }
   }
+
+  async unassignTask(taskId: string, userIds: string[]) {
+    const task = await this.taskModel.findById(taskId);
+    if (!task) {
+      throw new NotFoundException('Task not found');
+    }
+
+    task.assignedTo = task.assignedTo.filter(
+      (id) => !userIds.includes(id.toString()),
+    );
+    return task.save();
+  }
 }
