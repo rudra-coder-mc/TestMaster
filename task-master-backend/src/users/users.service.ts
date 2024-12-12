@@ -53,14 +53,13 @@ export class UsersService {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new this.userModel({
-      username,
-      email,
-      password: hashedPassword,
-    });
 
     try {
-      return await user.save();
+      return await this.userModel.create({
+        username,
+        email,
+        password: hashedPassword,
+      });
     } catch (error) {
       throw new InternalServerErrorException('Error creating new user', error);
     }

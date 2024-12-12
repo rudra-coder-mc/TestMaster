@@ -1,14 +1,20 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from 'src/users/users.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User } from 'src/users/users.schema';
 
 @Injectable()
 export class AuthService {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    @InjectModel(User.name) private userModel: Model<User>,
+  ) {}
 
   // Helper function to validate user credentials
   async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.userModel.findOne({ email }).exec();
     if (!user) {
       return null; // Do not log sensitive data like email
     }
