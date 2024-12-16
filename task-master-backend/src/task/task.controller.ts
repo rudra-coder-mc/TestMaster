@@ -10,7 +10,6 @@ import {
   UseGuards,
   Request,
   ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
 import { TaskService } from './task.service';
 import { RolesGuard } from 'src/guards/roles.guard';
@@ -72,28 +71,21 @@ export class TaskController {
     return { success: true, data: task };
   }
 
-  @Get('filter/user/:id') // Combined route
+  @Get('filter/user/:id')
   async findFilteredTasksByUser(
     @Param('id') userId: string,
     @Query('status') status: string,
     @Query('priority') priority: string,
-    @Query('dueDate') dueDate: string,
-    @Request() req,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
   ) {
-    const user = req.user;
-
-    // Ensure that the user is either an admin or the task owner
-    if (user.role !== UserRole.Admin && user._id.toString() !== userId) {
-      throw new ForbiddenException(
-        'You are not authorized to view tasks for this user',
-      );
-    }
-
-    // Build the query for filters
-    const query = this.buildQuery(status, priority, dueDate, userId);
-
-    // Fetch tasks using the combined query
-    const tasks = await this.taskService.findTasksWithFilters(query);
+    const tasks = await this.taskService.findTasksWithFilters({
+      status: status || undefined,
+      priority: priority as 'low' | 'medium' | 'high' | undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      assignedTo: userId || undefined,
+    });
 
     if (tasks.length === 0) {
       return {
@@ -138,8 +130,6 @@ export class TaskController {
     const taskToUpdate = await this.taskService.findTaskById(id);
     this.checkTaskPermission(user, taskToUpdate);
 
-    this.validateStatus(task.status);
-
     const updatedTask = await this.taskService.changeStatus(id, task.status);
     return { success: true, data: updatedTask };
   }
@@ -153,69 +143,6 @@ export class TaskController {
       throw new ForbiddenException(
         'You are not authorized to access this task',
       );
-    }
-  }
-
-  private buildQuery(
-    status: string,
-    priority: string,
-    dueDate: string,
-    userId: string,
-  ): any {
-    const query: any = { assignedTo: userId }; // Ensure it filters by userId
-
-    if (status) {
-      this.validateStatus(status);
-      query.status = status;
-    }
-
-    if (priority) {
-      this.validatePriority(priority);
-      query.priority = priority;
-    }
-
-    if (dueDate) {
-      query.dueDate = this.parseDueDate(dueDate);
-    }
-
-    return query;
-  }
-
-  private validateStatus(status: string) {
-    const validStatuses = [
-      'pending',
-      'completed',
-      'cancelled',
-      'not-started',
-      'in-progress',
-      'on-hold',
-    ];
-    if (!validStatuses.includes(status)) {
-      throw new BadRequestException(`Invalid status value: ${status}`);
-    }
-  }
-
-  private validatePriority(priority: string) {
-    const validPriorities = ['low', 'medium', 'high'];
-    if (!validPriorities.includes(priority)) {
-      throw new BadRequestException(`Invalid priority value: ${priority}`);
-    }
-  }
-
-  private parseDueDate(dueDate: string): Date | any {
-    const dueDateRange = dueDate.split(',');
-    if (dueDateRange.length === 2) {
-      const [startDate, endDate] = dueDateRange.map((date) => new Date(date));
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        throw new BadRequestException(`Invalid date range format: ${dueDate}`);
-      }
-      return { $gte: startDate, $lte: endDate };
-    } else {
-      const date = new Date(dueDate);
-      if (isNaN(date.getTime())) {
-        throw new BadRequestException(`Invalid date format: ${dueDate}`);
-      }
-      return date;
     }
   }
 }

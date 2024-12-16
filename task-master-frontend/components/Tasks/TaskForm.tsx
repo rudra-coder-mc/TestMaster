@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from "react";
 import { Form, Input, Select, Button, message } from "antd";
 import { POST, PUT } from "../../utils/http";
-import { Task, TaskFormProps } from "@/types/task"; // Ensure this is the correct import
+import { TaskFormProps } from "@/types/task"; // Ensure this is the correct import
 import { StyledForm } from "../styles";
 import { AxiosError } from "axios";
+import moment from "moment";
 
 const { TextArea } = Input;
 
@@ -19,17 +20,24 @@ const TaskForm: React.FC<TaskFormProps> = ({ task, onSubmitSuccess }) => {
         description: task.description || "", // Ensure description is defaulted to empty string if undefined
         status: task.status,
         assignedTo: task.assignedTo || "", // Ensure assignedTo is optional
+        dueDate: task.dueDate ? moment(task.dueDate) : null,
       });
     }
   }, [task, form]);
 
-  const handleSubmit = async (values: unknown) => {
-    const taskValues = values as Task; // Cast to Task
-    setLoading(true);
+  const handleSubmit = async () => {
     try {
+      const values = await form.validateFields();
+      const payload = {
+        ...values,
+        dueDate: values.dueDate
+          ? values.dueDate.utc().toISOString()
+          : undefined,
+      };
+
       if (task) {
         // Update existing task
-        const response = await PUT(`/tasks/${task._id}`, taskValues);
+        const response = await PUT(`/tasks/${task._id}`, payload);
         if (response.success) {
           message.success("Task updated successfully");
         } else {
@@ -37,7 +45,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ task, onSubmitSuccess }) => {
         }
       } else {
         // Create new task
-        const response = await POST("/tasks/create", taskValues);
+        const response = await POST("/tasks/create", payload);
         if (response.success) {
           message.success("Task created successfully");
           form.resetFields();

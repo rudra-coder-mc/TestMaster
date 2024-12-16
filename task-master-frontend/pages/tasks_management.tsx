@@ -55,9 +55,11 @@ const AdminTaskDashboard: React.FC = () => {
     try {
       setLoading(true);
       const [tasksResponse, usersResponse] = await Promise.all([
-        GET<null, Task[]>("/tasks/all"),
-        GET<null, User[]>("/users/all"),
+        GET("/tasks/all"),
+        GET("/users/all"),
       ]);
+      console.log("tasksResponse", tasksResponse);
+      console.log("usersResponse", usersResponse);
 
       if (tasksResponse.success) {
         setTasks(tasksResponse.data);
@@ -94,10 +96,7 @@ const AdminTaskDashboard: React.FC = () => {
         dueDate: values.dueDate ? values.dueDate.toISOString() : undefined,
       };
 
-      const response = await POST<Partial<Task>, Task>(
-        "/tasks/create",
-        payload
-      );
+      const response = await POST("/tasks/create", payload);
 
       if (response.success) {
         message.success("Task created successfully");
@@ -115,13 +114,10 @@ const AdminTaskDashboard: React.FC = () => {
     if (!selectedTaskForAssignment) return;
 
     try {
-      const response = await POST<{ taskId: string; userIds: string[] }, Task>(
-        "/tasks/assign",
-        {
-          taskId: selectedTaskForAssignment._id,
-          userIds: selectedUserIds,
-        }
-      );
+      const response = await POST("/tasks/assign", {
+        taskId: selectedTaskForAssignment._id,
+        userIds: selectedUserIds,
+      });
 
       if (response.success) {
         message.success("Task assigned successfully");
@@ -142,13 +138,10 @@ const AdminTaskDashboard: React.FC = () => {
     if (!selectedTaskForAssignment) return;
 
     try {
-      const response = await POST<{ taskId: string; userIds: string[] }, Task>(
-        "/tasks/unassign",
-        {
-          taskId: selectedTaskForAssignment._id,
-          userIds: selectedUserIds,
-        }
-      );
+      const response = await POST("/tasks/unassign", {
+        taskId: selectedTaskForAssignment._id,
+        userIds: selectedUserIds,
+      });
 
       if (response.success) {
         message.success("Users unassigned successfully");
@@ -167,7 +160,7 @@ const AdminTaskDashboard: React.FC = () => {
   // Delete a task
   const handleDeleteTask = async (taskId: string) => {
     try {
-      const response = await DELETE<null, null>(`/tasks/delete/${taskId}`);
+      const response = await DELETE(`/tasks/delete/${taskId}`);
       if (response.success) {
         message.success("Task deleted successfully");
         setTasks((prevTasks) =>

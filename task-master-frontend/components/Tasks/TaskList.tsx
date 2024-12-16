@@ -89,7 +89,7 @@ const handleApiError = (error: unknown, defaultMessage: string) => {
 
     // Ensure message.error gets a string
     message.error(
-      typeof errorMessage === "string" ? errorMessage : defaultMessage,
+      typeof errorMessage === "string" ? errorMessage : defaultMessage
     );
   } else {
     // If error doesn't match the expected structure, show the default message
@@ -106,6 +106,7 @@ const taskService = {
       console.log(response);
 
       if (!response.success || !response.data) {
+        console.log("error");
         throw new Error("Failed to fetch tasks");
       }
       return response.data;
@@ -118,6 +119,7 @@ const taskService = {
   async updateTask(taskId: string, payload: Partial<Task>) {
     try {
       const response = await PUT(`/tasks/update/${taskId}`, payload);
+      console.log(response);
 
       if (!response.success) {
         throw new Error("Failed to update task");
@@ -243,7 +245,7 @@ const TaskList: React.FC = () => {
     setCurrentTask(task || {});
     form.setFieldsValue({
       ...task,
-      dueDate: task?.dueDate ? moment(task.dueDate) : undefined,
+      dueDate: task?.dueDate ? moment.utc(task.dueDate) : undefined,
     });
     setIsModalVisible(true);
   };
@@ -269,7 +271,9 @@ const TaskList: React.FC = () => {
       const values = await form.validateFields();
       const payload = {
         ...values,
-        dueDate: values.dueDate ? values.dueDate.toISOString() : undefined,
+        dueDate: values.dueDate
+          ? moment.utc(values.dueDate).toISOString()
+          : undefined,
       };
 
       const success = await taskService.updateTask(currentTask._id!, payload);
@@ -277,8 +281,8 @@ const TaskList: React.FC = () => {
       if (success) {
         setTasks((prev) =>
           prev.map((task) =>
-            task._id === currentTask._id ? { ...task, ...values } : task,
-          ),
+            task._id === currentTask._id ? { ...task, ...values } : task
+          )
         );
         setIsModalVisible(false);
         message.success("Task updated successfully");
@@ -338,6 +342,7 @@ const TaskList: React.FC = () => {
             </Select.Option>
           ))}
         </Select>
+
         <DatePicker
           placeholder="Filter by Due Date"
           style={{ width: 200 }}
@@ -345,9 +350,19 @@ const TaskList: React.FC = () => {
             setFilters((prev) => {
               const updatedFilters = { ...prev };
               if (date) {
-                updatedFilters.dueDate = date.toISOString();
+                const startOfDay = moment(date?.toDate())
+                  .startOf("day")
+                  .utc()
+                  .toISOString();
+                const endOfDay = moment(date?.toDate())
+                  .endOf("day")
+                  .utc()
+                  .toISOString();
+                updatedFilters.startDate = startOfDay;
+                updatedFilters.endDate = endOfDay;
               } else {
-                delete updatedFilters.dueDate;
+                delete updatedFilters.startDate;
+                delete updatedFilters.endDate;
               }
               return updatedFilters;
             });

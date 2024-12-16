@@ -4,7 +4,7 @@ import axios, { AxiosRequestConfig } from "axios";
 // Create axios instance with default config
 const axiosInstance = axios.create({
   // Add any default configurations here if needed
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: process.env.API_URL,
   withCredentials: true,
   timeout: 10000,
 });
@@ -38,7 +38,7 @@ export const PUT = async (
 ) => {
   try {
     const response = await axiosInstance.put(url, data, config);
-    return response.data;
+    if (response.data.message == "Success") return response.data.data;
   } catch (error) {
     throw error;
   }
@@ -47,7 +47,7 @@ export const PUT = async (
 export const DELETE = async (url: string, config?: AxiosRequestConfig) => {
   try {
     const response = await axiosInstance.delete(url, config);
-    return response.data;
+    if (response.data.message == "Success") return response.data.data;
   } catch (error) {
     throw error;
   }

@@ -36,7 +36,7 @@ export class UsersController {
         success: true,
         message: 'Users retrieved successfully',
         data: users.map((user) => ({
-          id: user._id,
+          _id: user._id,
           username: user.username,
           email: user.email,
           type: user.type,

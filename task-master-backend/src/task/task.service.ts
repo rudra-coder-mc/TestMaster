@@ -36,23 +36,62 @@ export class TaskService {
     }
   }
 
+  private buildQuery(filter: TaskFilter): any {
+    const query: any = {};
+
+    if (filter.status) {
+      this.validateStatus(filter.status);
+      query.status = filter.status;
+    }
+
+    if (filter.priority) {
+      this.validatePriority(filter.priority);
+      query.priority = filter.priority;
+    }
+
+    if (filter.startDate && filter.endDate) {
+      query.dueDate = {
+        $gte: new Date(filter.startDate),
+        $lte: new Date(filter.endDate),
+      };
+    }
+
+    if (filter.assignedTo) {
+      if (!mongoose.Types.ObjectId.isValid(filter.assignedTo)) {
+        throw new BadRequestException(
+          `Invalid assigned user ID: ${filter.assignedTo}`,
+        );
+      }
+      query.assignedTo = new mongoose.Types.ObjectId(filter.assignedTo);
+    }
+
+    return query;
+  }
+
+  private validateStatus(status: string) {
+    const validStatuses = [
+      'pending',
+      'completed',
+      'cancelled',
+      'not-started',
+      'in-progress',
+      'on-hold',
+    ];
+    if (!validStatuses.includes(status)) {
+      throw new BadRequestException(`Invalid status value: ${status}`);
+    }
+  }
+
+  private validatePriority(priority: string) {
+    const validPriorities = ['low', 'medium', 'high'];
+    if (!validPriorities.includes(priority)) {
+      throw new BadRequestException(`Invalid priority value: ${priority}`);
+    }
+  }
+
   async findTasksWithFilters(filter: TaskFilter): Promise<Task[]> {
     try {
-      const filterQuery: any = {};
-
-      if (filter.status) filterQuery.status = filter.status;
-      if (filter.priority) filterQuery.priority = filter.priority;
-      if (filter.dueDate) filterQuery.dueDate = filter.dueDate;
-
-      if (filter.assignedTo) {
-        if (!mongoose.Types.ObjectId.isValid(filter.assignedTo)) {
-          throw new BadRequestException(
-            `Invalid assigned user ID: ${filter.assignedTo}`,
-          );
-        }
-        filterQuery.assignedTo = new mongoose.Types.ObjectId(filter.assignedTo);
-      }
-
+      const filterQuery = this.buildQuery(filter);
       return await this.taskModel.find(filterQuery).exec();
     } catch (error) {
       this.handleError(error, 'Failed to query tasks');
@@ -79,14 +118,12 @@ export class TaskService {
 
   async changeStatus(id: string, status: TaskStatus): Promise<Task> {
     try {
+      this.validateStatus(status);
       const task = await this.findTaskById(id);
-      task.status = status;
+      task.status = status as Task['status'];
       return await task.save();
     } catch (error) {
-      throw new InternalServerErrorException(
-        'Error updating task status',
-        error.message,
-      );
+      this.handleError(error, 'Error updating task status');
     }
   }
 
