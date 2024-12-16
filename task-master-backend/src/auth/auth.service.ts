@@ -4,6 +4,7 @@ import { UsersService } from 'src/users/users.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User } from 'src/users/users.schema';
+import { ErrorService } from 'src/common/services/error.service';
 
 @Injectable()
 export class AuthService {
@@ -12,36 +13,39 @@ export class AuthService {
     @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
-  // Helper function to validate user credentials
   async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.userModel.findOne({ email }).exec();
-    if (!user) {
-      return null; // Do not log sensitive data like email
-    }
+    try {
+      const user = await this.userModel.findOne({ email }).exec();
+      if (!user) {
+        throw new UnauthorizedException('Invalid email or password');
+      }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return null; // Avoid logging invalid credentials
-    }
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid email or password');
+      }
 
-    // Return the user data without the password field
-    return user.toObject({
-      versionKey: false,
-      transform: (doc, ret) => {
-        delete ret.password; // Remove password field from the returned object
-        return ret;
-      },
-    });
+      return user.toObject({
+        versionKey: false,
+        transform: (doc, ret) => {
+          delete ret.password;
+          return ret;
+        },
+      });
+    } catch (error) {
+      ErrorService.handleError(error, 'Error validating user credentials');
+    }
   }
 
-  // Main login function to authenticate user
   async login(email: string, password: string): Promise<any> {
-    const validUser = await this.validateUser(email, password);
-    if (!validUser) {
-      throw new UnauthorizedException('Invalid credentials');
+    try {
+      const validUser = await this.validateUser(email, password);
+      if (!validUser) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      return validUser;
+    } catch (error) {
+      ErrorService.handleError(error, 'Error during login process');
     }
-
-    // Return the validated user data, excluding sensitive information
-    return validUser;
   }
 }

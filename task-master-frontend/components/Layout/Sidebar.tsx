@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import Cookies from "js-cookie"; // Ensure js-cookie is installed
+import Cookies from "js-cookie";
 import { Menu } from "antd";
 import Link from "next/link";
 import {
@@ -20,93 +20,80 @@ const Sidebar: React.FC<{
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
 }> = ({ collapsed, setCollapsed }) => {
-  const [role, setRole] = useState<"user" | "admin" | null>(null); // Manage user role state
+  const [role, setRole] = useState<"user" | "admin" | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     const userCookie = Cookies.get("user");
-    if (userCookie) {
-      try {
-        const cleanedUserCookie = userCookie.startsWith("j:")
-          ? userCookie.slice(2)
-          : userCookie;
-
-        const user = JSON.parse(cleanedUserCookie);
-        setRole(user.role); // Extract role from cookie
-      } catch (error) {
-        console.error("Invalid JSON in user cookie:", error);
-      }
-    } else {
+    if (!userCookie) {
       console.warn("No user cookie found.");
+      return;
+    }
+
+    try {
+      const cleanedUserCookie = userCookie.startsWith("j:")
+        ? userCookie.slice(2)
+        : userCookie;
+
+      const user = JSON.parse(cleanedUserCookie);
+      if (user && (user.role === "user" || user.role === "admin")) {
+        setRole(user.role);
+      } else {
+        console.warn("Invalid user role in cookie:", user);
+      }
+    } catch (error) {
+      console.error("Invalid JSON in user cookie:", error);
     }
   }, []);
 
   const handleLogout = async () => {
     console.log("Logging out...");
-    // Call the backend logout endpoint
     await POST("/auth/logout");
-
     console.log("Cookie destroyed");
-
-    // Redirect to login page after logging out
     router.push("/login");
   };
 
-  // Menu items configuration
-  const menuItems = [
-    {
-      key: "tasks",
-      icon: <ProjectOutlined />,
-      label: <Link href="/tasks">My Tasks</Link>,
-      path: "/tasks",
-      roles: ["user"], // Only accessible to users
-    },
-    {
-      key: "TaskManagement",
-      icon: <DashboardOutlined />,
-      label: <Link href="/tasks_management">Task Management</Link>,
-      path: "/tasks_management",
-      roles: ["admin"], // Only accessible to admins
-    },
-  ];
-
-  // Filter menu items based on the role
-  const filteredMenuItems = menuItems.filter(
-    (item) => role && item.roles.includes(role),
-  );
-
   return (
     <StyledSider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
-      <LogoContainer collapsed={collapsed}>
+      <LogoContainer collapsed={collapsed} data-testid="sidebar-logo">
         {collapsed ? "TM" : "TaskMaster"}
       </LogoContainer>
 
       <MenuContainer>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[router.asPath]} // Use router.asPath for query string support
-          items={filteredMenuItems.map((item) => ({
-            key: item.path,
-            icon: item.icon,
-            label: item.label,
-          }))}
-        />
+        <Menu theme="light" mode="inline" selectedKeys={[router.asPath]}>
+          {role === "user" && (
+            <Menu.Item
+              key="/tasks"
+              icon={<ProjectOutlined />}
+              data-testid="tasks-menu-item"
+            >
+              <Link href="/tasks">My Tasks</Link>
+            </Menu.Item>
+          )}
+
+          {role === "admin" && (
+            <Menu.Item
+              key="/tasks_management"
+              icon={<DashboardOutlined />}
+              data-testid="tasks-management-menu-item"
+            >
+              <Link href="/tasks_management">Task Management</Link>
+            </Menu.Item>
+          )}
+        </Menu>
       </MenuContainer>
 
       <LogoutContainer>
-        <Menu
-          theme="dark"
-          mode="inline"
-          items={[
-            {
-              key: "logout",
-              icon: <LogoutOutlined />,
-              label: "Logout",
-              onClick: handleLogout,
-            },
-          ]}
-        />
+        <Menu theme="light" mode="inline">
+          <Menu.Item
+            key="logout"
+            icon={<LogoutOutlined />}
+            onClick={handleLogout}
+            data-testid="logout-menu-item"
+          >
+            Logout
+          </Menu.Item>
+        </Menu>
       </LogoutContainer>
     </StyledSider>
   );

@@ -24,6 +24,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
         )}
         <Layout
+          data-testid="main-layout"
           style={{
             marginLeft: showSidebar ? (collapsed ? "80px" : "200px") : 0,
             transition: "margin-left 0.3s ease-in-out",
@@ -35,13 +36,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         >
           {showHeaderAndFooter && (
             <StyledHeader>
-              <div>TaskMaster</div>
+              <div data-testid="header-logo">TaskMaster</div>
               <div>{/* Add user profile or logout button */}</div>
             </StyledHeader>
           )}
           <StyledContent>{children}</StyledContent>
           {showHeaderAndFooter && (
-            <StyledFooter>
+            <StyledFooter data-testid="footer-logo">
               TaskMaster ©{new Date().getFullYear()} Created by Your Company
             </StyledFooter>
           )}

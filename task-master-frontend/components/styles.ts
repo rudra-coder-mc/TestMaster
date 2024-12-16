@@ -26,9 +26,7 @@ const StyledCard = styled(Card)`
   width: 100%;
   max-width: 440px;
   border: none;
-  box-shadow:
-    0 4px 6px -1px rgb(0 0 0 / 0.1),
-    0 2px 4px -2px rgb(0 0 0 / 0.1);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   border-radius: 16px;
 
   .ant-card-body {
@@ -168,7 +166,7 @@ const StyledSider = styled(Sider)<{ collapsed: boolean }>`
   left: 0;
   top: 0;
   bottom: 0;
-  background-color: #001529;
+  background-color: #f9fafb;
   width: ${({ collapsed }) => (collapsed ? "80px" : "200px")};
   transition: width 0.3s ease-in-out;
 `;
@@ -178,10 +176,10 @@ const LogoContainer = styled.div<{ collapsed: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: #ffffff;
   font-size: ${({ collapsed }) => (collapsed ? "16px" : "18px")};
   font-weight: bold;
-  background-color: #002140;
+  background-color: #001529;
   white-space: nowrap;
 `;
 

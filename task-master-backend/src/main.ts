@@ -11,6 +11,7 @@ async function bootstrap() {
     credentials: true, // Allow cookies to be sent with the request
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Explicitly set allowed HTTP methods
     allowedHeaders: ['Content-Type', 'Authorization'], // Allow specific headers
+    exposedHeaders: ['Set-Cookie'], // Add this line
   });
   await app.listen(process.env.PORT ?? 8000);
 }

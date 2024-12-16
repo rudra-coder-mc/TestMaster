@@ -15,7 +15,11 @@ export default function SignupForm() {
     setLoading(true);
     try {
       // Send a POST request with form data
-      await POST("/auth/register", values);
+      const response = await POST("/auth/register", values);
+      console.log("register", response);
+      if (!response.success) {
+        throw new Error("error", response);
+      }
       message.success("Signup successful!");
       router.push("/login");
     } catch (error: unknown) {

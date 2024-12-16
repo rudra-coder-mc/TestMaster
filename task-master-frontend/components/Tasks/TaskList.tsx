@@ -102,9 +102,8 @@ const taskService = {
   async fetchTasks(userId: string, filters: Record<string, string>) {
     try {
       const queryString = new URLSearchParams(filters).toString();
-      const response = await GET<null, Task[]>(
-        `/tasks/filter/user/${userId}?${queryString}`,
-      );
+      const response = await GET(`/tasks/filter/user/${userId}?${queryString}`);
+      console.log(response);
 
       if (!response.success || !response.data) {
         throw new Error("Failed to fetch tasks");
@@ -151,7 +150,7 @@ const taskService = {
 const TaskList: React.FC = () => {
   const { userId } = useUserAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [currentTask, setCurrentTask] = useState<Partial<Task>>({});
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -250,17 +249,19 @@ const TaskList: React.FC = () => {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    Modal.confirm({
-      title: "Are you sure you want to delete this task?",
-      content: "This action cannot be undone.",
-      onOk: async () => {
-        const success = await taskService.deleteTask(taskId);
-        if (success) {
-          setTasks(tasks.filter((task) => task._id !== taskId));
-          message.success("Task deleted successfully");
-        }
-      },
-    });
+    try {
+      const response = await DELETE(`/tasks/${taskId}`);
+
+      if (response.success) {
+        message.success(response.message || "Task deleted successfully");
+        setTasks(tasks.filter((task) => task._id !== taskId));
+      } else {
+        message.error(response.message);
+      }
+    } catch (error) {
+      message.error("Failed to delete task");
+      console.error("Delete task error:", error);
+    }
   };
 
   const handleSubmit = async () => {

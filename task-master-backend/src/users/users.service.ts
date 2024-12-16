@@ -39,6 +39,20 @@ export class UsersService {
   }
 
   /**
+   * Get user by ID.
+   */
+  async getById(id: string): Promise<User | null> {
+    try {
+      return await this.userModel.findById(id).exec();
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error fetching user by ID',
+        error,
+      );
+    }
+  }
+
+  /**
    * Create a new user.
    * Hash the password and check if user already exists.
    */

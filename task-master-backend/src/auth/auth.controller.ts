@@ -5,16 +5,32 @@ import {
   Res,
   UseGuards,
   BadRequestException,
+  UnauthorizedException,
+  ValidationPipe,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { UsersService } from 'src/users/users.service';
 import { LocalAuthGuard } from '../guards/local-auth.guard';
 import { JwtService } from '@nestjs/jwt';
 import { Response } from 'express';
+import { ErrorService } from '../common/services/error.service';
 import { NODE_ENV } from 'src/config';
 
+// Add DTOs for better validation
+class RegisterDto {
+  username: string;
+  email: string;
+  password: string;
+}
+
+class LoginDto {
+  email: string;
+  password: string;
+}
+
 @Controller('auth')
-@UseGuards() // Disable global guards for this controller
+@UseGuards()
 export class AuthController {
   constructor(
     private authService: AuthService,
@@ -22,97 +38,172 @@ export class AuthController {
     private jwtService: JwtService,
   ) {}
 
-  /**
-   * Register a new user.
-   * @param body - { username: string, email: string, password: string }
-   * @returns The created user or a success message.
-   */
   @Post('register')
   async register(
-    @Body() body: { username: string; email: string; password: string },
+    @Body(new ValidationPipe()) body: RegisterDto,
+    @Res() res: Response,
   ) {
     try {
+      // Validate input
+      if (!body.email || !body.password || !body.username) {
+        throw new BadRequestException('Missing required fields');
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(body.email)) {
+        throw new BadRequestException('Invalid email format');
+      }
+
+      // Validate password strength
+      if (body.password.length < 8) {
+        throw new BadRequestException(
+          'Password must be at least 8 characters long',
+        );
+      }
+
       const user = await this.userService.create(
         body.username,
         body.email,
         body.password,
       );
-      return { message: 'User registered successfully', user };
+
+      // Remove sensitive data before sending response
+      const sanitizedUser = {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        type: user.type,
+      };
+
+      return res.status(201).json({
+        success: true,
+        message: 'User registered successfully',
+        data: sanitizedUser,
+      });
     } catch (error) {
-      throw new BadRequestException('Error registering user', error);
+      ErrorService.handleError(
+        error,
+        'Registration failed. Please try again later.',
+      );
     }
   }
 
-  /**
-   * Login user and generate JWT token.
-   * @param body - { email: string, password: string }
-   * @param res - Express response object to send the token in a cookie.
-   * @returns Success message if login is successful.
-   */
-  @UseGuards(LocalAuthGuard) // Use LocalAuthGuard for login only
+  @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(
-    @Body() body: { email: string; password: string },
-    @Res() res: Response,
+    @Body(new ValidationPipe()) body: LoginDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
     try {
+      if (!body.email || !body.password) {
+        throw new BadRequestException('Email and password are required');
+      }
+
       const user = await this.authService.login(body.email, body.password);
+      if (!user) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
       const payload = { email: user.email, _id: user._id, role: user.type };
       const accessToken = this.generateAccessToken(payload);
 
-      this.setCookie(res, accessToken, payload);
+      // Set cookies with proper options
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // Only use secure in production
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 1000, // 1 hour
+      };
 
-      return res.send({ message: 'Logged in successfully' });
+      res.cookie('access_token', accessToken, {
+        ...cookieOptions,
+        sameSite: NODE_ENV === 'production' ? 'strict' : ('lax' as const),
+      });
+      res.cookie('user', JSON.stringify(payload), {
+        ...cookieOptions,
+        sameSite: NODE_ENV === 'production' ? 'strict' : ('lax' as const),
+        httpOnly: false,
+      });
+
+      return {
+        success: true,
+        message: 'Logged in successfully',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            role: user.type,
+          },
+        },
+      };
     } catch (error) {
-      throw new BadRequestException('Invalid credentials', error);
+      ErrorService.handleError(
+        error,
+        'Login failed. Please check your credentials and try again.',
+      );
     }
   }
 
   @Post('logout')
-  logout(@Res() res: Response) {
-    res.clearCookie('access_token', {
-      path: '/', // Ensure path matches
-      sameSite: 'none', // Corrected to lowercase 'none'
-      secure: true, // Ensure the secure flag matches
-    });
-    res.clearCookie('role', {
-      path: '/', // Ensure path matches
-      sameSite: 'none', // Corrected to lowercase 'none'
-      secure: true, // Ensure the secure flag matches
-    });
+  async logout(@Res() res: Response) {
+    try {
+      const cookieOptions = {
+        path: '/',
+        sameSite: 'none' as const,
+        secure: true,
+        httpOnly: true,
+      };
 
-    return res.send({ message: 'Logged out successfully' });
+      res.clearCookie('access_token', cookieOptions);
+      res.clearCookie('user', cookieOptions);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Logged out successfully',
+      });
+    } catch (error) {
+      ErrorService.handleError(error, 'Logout failed. Please try again.');
+    }
   }
 
-  /**
-   * Generate JWT access token.
-   * @param payload - Payload containing user info.
-   * @returns The signed JWT token.
-   */
   private generateAccessToken(payload: any): string {
-    return this.jwtService.sign(payload);
+    try {
+      return this.jwtService.sign(payload);
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error generating access token',
+        error,
+      );
+    }
   }
 
-  /**
-   * Set the JWT token as an HTTP-only cookie.
-   * @param res - Express response object.
-   * @param accessToken - The JWT token to be set.
-   */
   private setCookie(
     res: Response,
     accessToken: string,
     user: { email: string; _id: string; role: string },
   ): void {
-    res.cookie('access_token', accessToken, {
+    const cookieOptions = {
       httpOnly: true,
-      secure: NODE_ENV === 'production', // Ensures the cookie is sent over HTTPS in production
-      sameSite: 'none', // Corrected to lowercase 'none'
-      maxAge: 60 * 60 * 1000, // Token expires after 1 hour
-    });
-    res.cookie('user', user, {
-      secure: NODE_ENV === 'production', // Ensures the cookie is sent over HTTPS in production
-      sameSite: 'none', // Corrected to lowercase 'none'
-      maxAge: 60 * 60 * 1000, // Token expires after 1 hour
-    });
+      secure: true,
+      sameSite: 'lax' as const,
+      path: '/',
+      maxAge: 60 * 60 * 1000,
+    };
+
+    try {
+      res.cookie('access_token', accessToken, {
+        ...cookieOptions,
+        httpOnly: true,
+      });
+
+      res.cookie('user', JSON.stringify(user), {
+        ...cookieOptions,
+        httpOnly: false,
+      });
+    } catch (error) {
+      ErrorService.handleError(error, 'Error setting cookies');
+    }
   }
 }
